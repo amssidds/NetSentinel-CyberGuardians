@@ -45,7 +45,7 @@ def home():
             "/api/lists/add",
             "/api/lists/remove",
             "/api/lists/clear",
-            "/report/<query_id>"
+            "/report/<query_or_domain>"
         ]
     })
 
@@ -107,13 +107,12 @@ def api_lists():
         "block_count": len(blocklist)
     })
 
-
 @app.route("/api/lists/add", methods=["POST"])
 def api_lists_add():
     """Add domain to allowlist or blocklist."""
     data = request.get_json(force=True)
     domain = data.get("domain", "").strip().lower()
-    list_type = data.get("type", "").strip().lower()  # "allow" or "block"
+    list_type = data.get("type", "").strip().lower()
 
     if not domain or list_type not in ("allow", "block"):
         return jsonify({"error": "Bad request"}), 400
@@ -127,13 +126,12 @@ def api_lists_add():
 
     return jsonify({"ok": True, "action": "added", "domain": domain, "list": list_type})
 
-
 @app.route("/api/lists/remove", methods=["POST"])
 def api_lists_remove():
     """Remove domain from allowlist or blocklist."""
     data = request.get_json(force=True)
     domain = data.get("domain", "").strip().lower()
-    list_type = data.get("type", "").strip().lower()  # "allow" or "block"
+    list_type = data.get("type", "").strip().lower()
 
     if not domain or list_type not in ("allow", "block"):
         return jsonify({"error": "Bad request"}), 400
@@ -144,36 +142,82 @@ def api_lists_remove():
 
     return jsonify({"ok": True, "action": "removed", "domain": domain, "list": list_type})
 
-
 @app.route("/api/lists/clear", methods=["POST"])
 def api_lists_clear():
     """Clear entire allowlist or blocklist."""
     data = request.get_json(force=True)
-    list_type = data.get("type", "").strip().lower()  # "allow" or "block"
+    list_type = data.get("type", "").strip().lower()
 
     if list_type not in ("allow", "block"):
         return jsonify({"error": "Bad request"}), 400
 
     path = cfg.ALLOWLIST_FILE if list_type == "allow" else cfg.BLOCKLIST_FILE
-    open(path, "w").close()  # empty the file safely
+    open(path, "w").close()
     return jsonify({"ok": True, "action": "cleared", "list": list_type})
 
 # =========================================================
-# === Reports
+# === Reports (supports Query ID or Domain)
 # =========================================================
 
-@app.route("/report/<query_id>", methods=["GET"])
-def report(query_id):
-    """Return detailed report JSON for a specific query ID."""
-    pattern = os.path.join(cfg.REPORTS_DIR, f"{query_id}_*.json")
-    files = glob.glob(pattern)
-    reports = {}
+@app.route("/report/<query_or_domain>")
+def get_report(query_or_domain):
+    """Return human-readable narrative explaining why a domain or query was blocked."""
+    q = query_or_domain.strip()
 
-    for fpath in files:
-        with open(fpath, "r") as f:
-            reports[os.path.basename(fpath)] = json.load(f)
+    # --- Case 1: Query ID lookup in DB ---
+    if q.startswith("QX-"):
+        try:
+            conn = sqlite3.connect(cfg.DB_PATH)
+            cur = conn.cursor()
+            cur.execute("SELECT query_id, domain, client_ip, score, verdict, reasons, modules_result, ts FROM logs WHERE query_id = ?", (q,))
+            row = cur.fetchone()
+            conn.close()
 
-    return jsonify({"query_id": query_id, "reports": reports})
+            if not row:
+                return jsonify({"error": "Query ID not found"}), 404
+
+            qid, domain, cip, score, verdict, reasons, modules_json, ts = row
+            modules = json.loads(modules_json) if modules_json else {}
+
+            story = [f"The query **{qid}** from client **{cip}** attempted to reach **{domain}** at {ts}."]
+            story.append(f"The system classified this request with a **final verdict of {verdict.upper()}**, based on analyzer consensus and weighted risk scoring.")
+
+            if modules:
+                story.append("Here is how each analyzer contributed:")
+                for mod, res in modules.items():
+                    flag = "⚠️ Flagged" if int(res.get("flag", 0)) else "✅ Allowed"
+                    label = res.get("label", "unknown").capitalize()
+                    score_mod = res.get("score", "?")
+                    reason = res.get("reason", "")
+                    story.append(f"- **{mod.replace('_',' ').title()}** → {flag} as *{label}* (score={score_mod}). {reason}")
+
+            story.append(f"🧾 **Final Verdict:** {verdict.upper()} with total score {score} (threshold {cfg.DECISION_THRESHOLD}).")
+            return jsonify({"query_id": qid, "domain": domain, "narrative": "\n".join(story)})
+
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    # --- Case 2: Domain name lookup in reports/ ---
+    else:
+        pattern = os.path.join(cfg.REPORTS_DIR, f"*_{q}.json")
+        files = glob.glob(pattern)
+        if not files:
+            return jsonify({"error": f"No reports found for domain {q}"}), 404
+
+        story = [f"📊 Report summary for **{q}**:"]
+        for fpath in files:
+            base = os.path.basename(fpath)
+            with open(fpath, "r") as f:
+                data = json.load(f)
+            module = data.get("module", os.path.splitext(base)[0])
+            flag = "⚠️ Flagged" if int(data.get("flag", 0)) else "✅ Allowed"
+            label = data.get("label", "unknown").capitalize()
+            score_mod = data.get("score", "?")
+            reason = data.get("reason", "")
+            story.append(f"- **{module.replace('_',' ').title()}** → {flag} as *{label}* (score={score_mod}). {reason}")
+
+        story.append("🧩 Combined verdict derived from analyzer modules.")
+        return jsonify({"domain": q, "narrative": "\n".join(story)})
 
 # =========================================================
 # === Start Server
