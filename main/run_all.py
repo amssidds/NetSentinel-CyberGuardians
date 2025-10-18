@@ -1,45 +1,92 @@
+# run_all.py
 import subprocess
 import time
 import os
+import signal
+import sys
 
-# Simple helper to launch background processes
-def launch(cmd, name):
-    print(f"🚀 Starting {name}...")
-    return subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+BANNER = r"""
+=========================================
+ 🛡️  NetSentinel Unified Startup Script
+=========================================
+"""
 
-# Activate the venv
-VENV_PY = os.path.join(os.getcwd(), "venv/bin/python3")
+def here(*parts):
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), *parts)
 
-# Start AI modules
-modules = [
-    ("AI Domain Classifier", f"{VENV_PY} ai_modules/domain_classifier.py"),
-]
+def start(cmd, name):
+    print(f"[*] Launching {name} ...")
+    return subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True
+    )
 
-# Start backend + dashboard
-core = [
-    ("API Handler", f"{VENV_PY} api_handler.py"),
-    ("Dashboard", f"{VENV_PY} dashboard.py"),
-]
+def tail(process, name):
+    time.sleep(0.3)
+    if process.poll() is not None:
+        out = process.stdout.read() if process.stdout else ""
+        print(f"[!] {name} exited early.\n{out}")
+        sys.exit(1)
 
-# Optional real-time logs (comment out if you don’t want it)
-# logs = [("Log Collector", f"{VENV_PY} log_collector.py")]
-logs = []
+def main():
+    print(BANNER)
+    processes = []
 
-# Launch all
-procs = []
-for name, cmd in modules + core + logs:
-    p = launch(cmd, name)
-    procs.append((name, p))
-    time.sleep(2)
+    try:
+        ai_dir = here("ai_modules")
 
-print("\n✅ All components started. Press Ctrl+C to stop.\n")
+        # 1) Domain Classifier (6001)
+        p_dc = start(["python3", os.path.join(ai_dir, "domain_classifier.py")], "Domain Classifier (6001)")
+        processes.append(("Domain Classifier", p_dc))
+        tail(p_dc, "Domain Classifier")
 
-try:
-    while True:
-        time.sleep(1)
-except KeyboardInterrupt:
-    print("\n🛑 Stopping all processes...")
-    for name, p in procs:
-        print(f"Terminating {name}...")
-        p.terminate()
-    print("All stopped.")
+        # 2) Anomaly Detector (6002)
+        p_anom = start(["python3", os.path.join(ai_dir, "anomaly_detector.py")], "Anomaly Detector (6002)")
+        processes.append(("Anomaly Detector", p_anom))
+        tail(p_anom, "Anomaly Detector")
+
+        # 3) WHOIS Analyzer (6003)
+        p_whois = start(["python3", os.path.join(ai_dir, "whois_analyzer.py")], "WHOIS Analyzer (6003)")
+        processes.append(("WHOIS Analyzer", p_whois))
+        tail(p_whois, "WHOIS Analyzer")
+
+        # 4) API Handler (5000)
+        p_api = start(["python3", here("api_handler.py")], "API Handler (5000)")
+        processes.append(("API Handler", p_api))
+        tail(p_api, "API Handler")
+
+        # 5) Dashboard (8080)
+        p_dash = start(["python3", here("dashboard.py")], "Dashboard (8080)")
+        processes.append(("Dashboard", p_dash))
+        tail(p_dash, "Dashboard")
+
+        print("\n✅ All services launched successfully!\n")
+        print("🌐 Dashboard   : http://127.0.0.1:8080")
+        print("📡 API Handler : http://127.0.0.1:5000")
+        print("🧠 WHOIS (/check): http://127.0.0.1:6003")
+        print("📊 Anomaly Detector (/check): http://127.0.0.1:6002\n")
+        print("Press CTRL+C to stop everything.\n")
+
+        # Keep alive loop
+        while True:
+            time.sleep(1)
+            for name, proc in processes:
+                if proc.poll() is not None:
+                    print(f"\n[!] {name} stopped unexpectedly. Stopping all ...")
+                    raise KeyboardInterrupt
+
+    except KeyboardInterrupt:
+        print("\n[!] Terminating all services...")
+        for name, proc in processes:
+            try:
+                if proc.poll() is None:
+                    os.kill(proc.pid, signal.SIGTERM)
+                    time.sleep(0.2)
+            except Exception:
+                pass
+        print("[✓] All services terminated. Goodbye.")
+
+if __name__ == "__main__":
+    main()
