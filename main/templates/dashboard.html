@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NetSentinel Live Dashboard</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{--bg:#f7f9fc;--card:#fff;--border:#e5e7eb;--blue:#3b82f6;--red:#ef4444;--orange:#f59e0b;--green:#22c55e;--muted:#6b7280}
+body{font-family:"Segoe UI",sans-serif;background:var(--bg);margin:0;color:#111}
+header{background:var(--card);padding:20px;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,0.05)}
+h1{margin:0;color:#0a58ca;display:flex;justify-content:center;align-items:center;gap:8px}
+.shield{font-size:28px}
+.cards{display:flex;justify-content:space-around;flex-wrap:wrap;margin:20px;gap:15px}
+.card{flex:1;min-width:200px;padding:20px;border-radius:12px;text-align:center;color:#fff;box-shadow:0 2px 6px rgba(0,0,0,0.1)}
+.blue{background:var(--blue)}.red{background:var(--red)}.orange{background:var(--orange)}.green{background:var(--green)}
+.card h2{margin:0;font-size:16px}.card p{margin:8px 0 0;font-size:32px;font-weight:bold}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:20px}
+.panel{background:var(--card);border-radius:10px;box-shadow:0 2px 6px rgba(0,0,0,0.08);padding:14px}
+.title{font-weight:bold;margin:4px 0 8px}.actions{display:flex;justify-content:space-between;align-items:center;margin-top:8px}
+button{background:var(--blue);border:none;color:#fff;border-radius:6px;padding:8px 12px;cursor:pointer}
+button.red{background:var(--red)}button.gray{background:#64748b}
+table{width:100%;border-collapse:collapse}
+th,td{padding:8px 10px;border-bottom:1px solid var(--border)}thead{background:#f1f5f9}
+.chat{background:var(--card);margin:20px;border-radius:10px;padding:16px;box-shadow:0 2px 6px rgba(0,0,0,0.08)}
+.chat h3{color:#2563eb;margin-top:0}
+input[type=text]{width:80%;padding:8px;border:1px solid var(--border);border-radius:6px}
+#chatOutput{margin-top:10px;white-space:pre-wrap;font-family:monospace;color:#333;border:1px dashed var(--border);border-radius:6px;padding:10px;min-height:70px;background:#fafafa}
+</style>
+</head>
+<body>
+<header><h1><span class="shield">🛡️</span> NetSentinel Live Dashboard</h1></header>
+
+<section class="cards">
+  <div class="card blue"><h2>Total Queries</h2><p id="kpiTotal">--</p></div>
+  <div class="card red"><h2>Blocked</h2><p id="kpiBlocked">--</p></div>
+  <div class="card orange"><h2>Blocked %</h2><p id="kpiPct">--%</p></div>
+  <div class="card green"><h2>Blocklist Count</h2><p id="kpiBlockCount">--</p></div>
+</section>
+
+<section class="grid">
+  <div class="panel">
+    <div class="title" style="color:#dc2626">Blocked Domains</div>
+    <table><thead><tr><th>Domain</th><th>Client</th><th>Time</th><th>Action</th></tr></thead><tbody id="blockedBody"></tbody></table>
+    <div class="actions">
+      <button class="gray" onclick="pagePrev('blocked')">◀ Prev</button>
+      <span id="blockedPage">Page 1</span>
+      <button class="gray" onclick="pageNext('blocked')">Next ▶</button>
+      <button class="red" onclick="clearList('block')">🗑 Clear All</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="title" style="color:#16a34a">Allowed Domains</div>
+    <table><thead><tr><th>Domain</th><th>Client</th><th>Time</th><th>Action</th></tr></thead><tbody id="allowedBody"></tbody></table>
+    <div class="actions">
+      <button class="gray" onclick="pagePrev('allowed')">◀ Prev</button>
+      <span id="allowedPage">Page 1</span>
+      <button class="gray" onclick="pageNext('allowed')">Next ▶</button>
+      <button class="red" onclick="clearList('allow')">🗑 Clear All</button>
+    </div>
+  </div>
+</section>
+
+<section class="chat">
+  <h3>🤖 Ask Why a Domain Was Blocked</h3>
+  <input id="askInput" type="text" placeholder="Enter Query ID or Domain">
+  <button onclick="askReason()">Ask</button>
+  <div id="chatOutput">Awaiting input...</div>
+</section>
+
+<script>
+const PAGE_SIZE=5;
+let logs=[],lists={allowlist:[],blocklist:[]},pages={blocked:1,allowed:1};
+
+function dedupe(rows){
+  const seen=new Set(),out=[];
+  for(const r of rows){if(!seen.has(r.domain)){seen.add(r.domain);out.push(r);}}
+  return out;
+}
+function paginate(arr,page){return arr.slice((page-1)*PAGE_SIZE,(page)*PAGE_SIZE);}
+function setPageLabel(k,total){document.getElementById(k+'Page').textContent=`Page ${pages[k]} of ${Math.ceil(total/PAGE_SIZE)||1}`;}
+
+async function loadAll(){
+  const [lgs,lst]=await Promise.all([fetch('/api/logs').then(r=>r.json()),fetch('/api/lists').then(r=>r.json())]);
+  logs=lgs||[];lists=lst||{};
+  const total=logs.length,blocked=logs.filter(x=>x.verdict==='BLOCK').length;
+  document.getElementById('kpiTotal').textContent=total||0;
+  document.getElementById('kpiBlocked').textContent=blocked||0;
+  document.getElementById('kpiPct').textContent=total?((blocked/total*100).toFixed(1)+'%'):'--%';
+  document.getElementById('kpiBlockCount').textContent=lists.block_count||lists.blocklist?.length||0;
+
+  const sorted=[...logs].sort((a,b)=>(b.timestamp||'').localeCompare(a.timestamp||''));
+  const blockRows=dedupe(sorted.filter(x=>x.verdict==='BLOCK'));
+  const allowRows=dedupe(sorted.filter(x=>x.verdict==='ALLOW' && !lists.blocklist.includes(x.domain)));
+
+  renderTable('blocked',blockRows,lists.blocklist);
+  renderTable('allowed',allowRows,lists.allowlist);
+}
+
+function renderTable(kind,rows,listFile){
+  const body=document.getElementById(kind+'Body');body.innerHTML='';
+  const pageRows=paginate(rows,pages[kind]);
+  for(const r of pageRows){
+    const inList=listFile.includes(r.domain);
+    body.innerHTML+=`<tr><td>${r.domain}</td><td>${r.client_ip||'-'}</td><td>${r.timestamp||'-'}</td><td>${inList?'<button class="red" onclick="removeFromList(\''+kind.replace('ed','')+'\',\''+r.domain+'\')">Remove</button>':'—'}</td></tr>`;
+  }
+  setPageLabel(kind,rows.length);
+}
+
+function pageNext(k){pages[k]++;loadAll();}
+function pagePrev(k){if(pages[k]>1){pages[k]--;loadAll();}}
+
+async function removeFromList(type,domain){
+  if(!confirm('Remove '+domain+' from '+type+'list?'))return;
+  await fetch('/api/lists/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,domain})});
+  loadAll();
+}
+
+async function clearList(type){
+  if(!confirm('Clear entire '+type+'list?'))return;
+  await fetch('/api/lists/clear',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type})});
+  loadAll();
+}
+
+async function askReason(){
+  const q=document.getElementById('askInput').value.trim();const out=document.getElementById('chatOutput');
+  if(!q){alert('Enter a query or domain');return;}
+  const row=logs.find(x=>x.query_id===q||x.domain===q);
+  if(!row){out.textContent='❌ No record found.';return;}
+  out.textContent=`Query: ${row.query_id}\nDomain: ${row.domain}\nClient: ${row.client_ip}\nVerdict: ${row.verdict}\nTime: ${row.timestamp}`;
+}
+
+loadAll();setInterval(loadAll,5000);
+</script>
+</body>
+</html>
