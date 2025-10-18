@@ -63,7 +63,7 @@ input[type=text]{width:80%;padding:8px;border:1px solid var(--border);border-rad
 
 <section class="chat">
   <h3>🤖 Ask Why a Domain Was Blocked</h3>
-  <input id="askInput" type="text" placeholder="Enter Query ID or Domain">
+  <input id="askInput" type="text" placeholder="Enter Query ID (QX-...) or Domain (e.g., example.com)">
   <button onclick="askReason()">Ask</button>
   <div id="chatOutput">Awaiting input...</div>
 </section>
@@ -101,7 +101,7 @@ function renderTable(kind,rows,listFile){
   const body=document.getElementById(kind+'Body');body.innerHTML='';
   const pageRows=paginate(rows,pages[kind]);
   for(const r of pageRows){
-    const inList=listFile.includes(r.domain);
+    const inList=(listFile||[]).includes(r.domain);
     body.innerHTML+=`<tr><td>${r.domain}</td><td>${r.client_ip||'-'}</td><td>${r.timestamp||'-'}</td><td>${inList?'<button class="red" onclick="removeFromList(\''+kind.replace('ed','')+'\',\''+r.domain+'\')">Remove</button>':'—'}</td></tr>`;
   }
   setPageLabel(kind,rows.length);
@@ -123,11 +123,42 @@ async function clearList(type){
 }
 
 async function askReason(){
-  const q=document.getElementById('askInput').value.trim();const out=document.getElementById('chatOutput');
-  if(!q){alert('Enter a query or domain');return;}
-  const row=logs.find(x=>x.query_id===q||x.domain===q);
-  if(!row){out.textContent='❌ No record found.';return;}
-  out.textContent=`Query: ${row.query_id}\nDomain: ${row.domain}\nClient: ${row.client_ip}\nVerdict: ${row.verdict}\nTime: ${row.timestamp}`;
+  const q=document.getElementById('askInput').value.trim();
+  const out=document.getElementById('chatOutput');
+  if(!q){alert('Enter a query ID or domain');return;}
+
+  // If the user typed a domain, find the latest row to show header info
+  let row = logs.find(x => x.query_id===q || x.domain===q);
+  const target = encodeURIComponent(q); // support dots etc.
+
+  out.textContent = '⏳ Fetching explanation...';
+  try{
+    // call our dashboard proxy which forwards to API :5000
+    const r = await fetch(`/api/report/${target}`);
+    const data = await r.json();
+    if(!r.ok || !data || (!data.narrative && !data.error)){
+      out.textContent = '⚠️ Error fetching report.';
+      return;
+    }
+
+    if(data.error){
+      out.textContent = '⚠️ ' + data.error;
+      return;
+    }
+
+    // Build a nice header if we have a matching log row
+    let header = '';
+    if(!row && data.query_id && data.domain){
+      // if API returned query-level info, synthesize a header
+      header = `Query: ${data.query_id}\nDomain: ${data.domain}\n\n`;
+    } else if(row){
+      header = `Query: ${row.query_id}\nDomain: ${row.domain}\nClient: ${row.client_ip}\nVerdict: ${row.verdict}\nTime: ${row.timestamp}\n\n`;
+    }
+
+    out.textContent = header + (data.narrative || '');
+  }catch(e){
+    out.textContent = '⚠️ Error fetching report.';
+  }
 }
 
 loadAll();setInterval(loadAll,5000);
