@@ -1,0 +1,9 @@
+{
+  "ok": false,
+  "flag": 0,
+  "score": 0,
+  "reason": "error:HTTPConnectionPool(host='127.0.0.1', port=6003): Max retries exceeded with url: /check (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x740a53873710>: Failed to establish a new connection: [Errno 111] Connection refused'))",
+  "query_id": "QX-66cd629d",
+  "module": "whois_analyzer",
+  "domain": "phishing-login.xyz"
+}

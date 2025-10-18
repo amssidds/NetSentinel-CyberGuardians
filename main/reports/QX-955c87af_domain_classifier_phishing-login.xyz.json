@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "flag": 0,
+  "score": 0,
+  "reason": "Model not loaded",
+  "query_id": "QX-955c87af",
+  "module": "domain_classifier",
+  "domain": "phishing-login.xyz"
+}

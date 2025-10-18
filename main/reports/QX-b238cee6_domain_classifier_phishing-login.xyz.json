@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "flag": 1,
+  "score": 1,
+  "reason": "ML probability=0.73 \u2192 malicious",
+  "query_id": "QX-b238cee6",
+  "module": "domain_classifier",
+  "domain": "phishing-login.xyz"
+}
