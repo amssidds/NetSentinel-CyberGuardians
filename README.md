@@ -1,25 +1,25 @@
-# NetSentinel-CyberGuardians
+# 🛡️ NetSentinel — AI-Powered DNS, WHOIS & VirusTotal Threat Advisor
 
 ### Team Cyber Guardians | Innovation Hackathon UAE 2025  
 **Developed by:**  
 - Ameen Siddiqui — Backend & DNS Engine  
 - Ahmed Hussein — WHOIS & NLP Analyzer  
-- Mohamed Ibrahim Idris — Data & Behavior Response  
+- Farzain Ali — Data & Behavior Analytics  
 
 ---
 
 ## 🚀 Overview
 
-**NetSentinel** is an intelligent, **real-time DNS filtering and analytics system** that detects and blocks malicious domains at the network layer using multi-stage AI analysis, WHOIS metadata, and behavioral anomaly detection.  
+**NetSentinel** is an intelligent, **real-time DNS filtering and analytics system** that detects and blocks malicious domains at the network layer using **multi-stage AI analysis**, **WHOIS metadata**, **VirusTotal enrichment**, and **behavioral anomaly detection**.  
 
 The system integrates:
-- A machine-learning **Domain Classifier**  
-- A behavior-based **Anomaly Detector**  
-- A metadata-driven **WHOIS Analyzer**  
-- A **central API** with unified logging  
-- A **real-time Flask Dashboard**  
+- 🧠 **Domain Classifier** — Machine Learning lexical risk engine  
+- 📊 **Anomaly Detector** — Frequency-based behavioral analytics  
+- 🔍 **WHOIS Analyzer** — Metadata inspection (age, registrar, privacy)  
+- 🧬 **VirusTotal Intelligence API** — URL & domain reputation lookup  
+- ⚙️ **Central API + Dashboard** — Unified visibility & decision-making  
 
-Together, these components deliver a modern, autonomous network defense platform capable of identifying phishing, command-and-control, and zero-day domains **before** users can connect to them.
+Together, these components deliver a modern, autonomous network defense platform capable of identifying phishing, C2, and zero-day domains **before** users can connect to them.
 
 ---
 
@@ -31,12 +31,12 @@ Together, these components deliver a modern, autonomous network defense platform
 | (via Unbound/Pi)  |       |  Decision Engine   |
 +-------------------+       +--------------------+
                                       |
-             ----------------------------------------------------
-             |                       |                         |
-   +--------------------+   +--------------------+   +--------------------+
-   | Domain Classifier  |   | Anomaly Detector   |   | WHOIS Analyzer     |
-   | (ML / Scikit-Learn)|   | (Behavior Stats)   |   | (WHOIS Metadata)   |
-   +--------------------+   +--------------------+   +--------------------+
+             ----------------------------------------------------------------
+             |             |                |               |               |
+   +------------------+ +------------------+ +------------------+ +------------------+
+   | Domain Classifier| | Anomaly Detector | | WHOIS Analyzer   | | VirusTotal API  |
+   | (ML / Scikit)    | | (Behavior Stats) | | (WHOIS Metadata) | | (Reputation)    |
+   +------------------+ +------------------+ +------------------+ +------------------+
                                       |
                             +--------------------+
                             | Unified Log DB     |
@@ -56,12 +56,13 @@ Together, these components deliver a modern, autonomous network defense platform
 
 ## ⚙️ Key Features
 
-✅ **AI-Driven Domain Classification** — Uses ML model (trained via scikit-learn) to detect algorithmic or phishing-like domain names.  
-✅ **Anomaly Detection Engine** — Flags domains never seen before per client (frequency-based behavioral detection).  
-✅ **WHOIS Intelligence Analyzer** — Evaluates registration age, registrar reputation, privacy masking.  
-✅ **Multi-Module Scoring System** — Each module contributes weighted evidence; combined verdict determines ALLOW / BLOCK.  
-✅ **Live Dashboard** — Real-time Flask UI showing blocked/allowed queries, risk trends, and “Ask Why” explanations.  
-✅ **Full Traceability** — Every decision saved as a JSON report for transparency and forensic replay.  
+✅ **AI Domain Classification** — Detects phishing/DGA domains using ML.  
+✅ **Anomaly Detection Engine** — Flags domains never seen before per client.  
+✅ **WHOIS Intelligence Analyzer** — Evaluates registration metadata.  
+✅ **VirusTotal Integration** — Queries the VirusTotal API to cross-check domain or URL reputation, detect community flags, and integrate confidence scores into the unified verdict.  
+✅ **Multi-Module Scoring System** — Weighted analyzer consensus model.  
+✅ **Real-Time Dashboard** — Flask-based visualization with live logs.  
+✅ **Explainable AI Reports** — JSON + human-readable narratives per verdict.  
 
 ---
 
@@ -71,28 +72,45 @@ Together, these components deliver a modern, autonomous network defense platform
 |------------|-------------|
 | **Backend Framework** | Python (Flask) |
 | **AI Models** | scikit-learn, pandas |
+| **Threat Intelligence** | VirusTotal REST API |
 | **Database** | SQLite (dns_logs.db) |
 | **Dashboard** | HTML5 / CSS / JS (Flask templates) |
 | **APIs** | Flask REST (port 5000) |
-| **Modules** | Domain Classifier (6001), Anomaly Detector (6002), WHOIS Analyzer (6003) |
+| **Modules** | Domain Classifier (6001), Anomaly Detector (6002), WHOIS Analyzer (6003), VirusTotal (6004) |
 | **Visualization** | Real-Time Dashboard (port 8080) |
-| **Data Format** | JSON (report exports) |
+| **Data Format** | JSON Reports + Markdown Summaries |
 
 ---
 
-## 🧰 Installation
+## 🧬 VirusTotal Integration
 
-```bash
-# Clone the repo
-git clone https://github.com/<yourusername>/NetSentinel-CyberGuardians.git
-cd NetSentinel-CyberGuardians
+NetSentinel connects to the **VirusTotal Intelligence API** to verify suspicious domains or URLs against live global reputation data.  
 
-# Create a virtual environment
-python3 -m venv venv
-source venv/bin/activate
+### 🔗 API Behavior
+- Each detected domain is enriched by querying VirusTotal's `/domains/{domain}` endpoint.  
+- The result returns:  
+  - Reputation score  
+  - Number of engines marking it malicious  
+  - Categories (e.g., phishing, malware, spam)  
+  - Last analysis timestamp  
+- A verdict score (0–100) is normalized and weighted with other modules.
 
-# Install dependencies
-pip install -r requirements.txt
+### 🧰 Example Result
+```json
+{
+  "module": "virustotal_analyzer",
+  "flag": 1,
+  "label": "high",
+  "score": 0.95,
+  "reasons": ["Listed as 'phishing' by 12/90 engines"]
+}
+```
+
+You can enable or disable VirusTotal in `engine_config.py`:
+```python
+ENABLE_VIRUSTOTAL = True
+VT_API_KEY = "your_virustotal_api_key_here"
+VT_ENDPOINT = "https://www.virustotal.com/api/v3/domains/"
 ```
 
 ---
@@ -103,107 +121,88 @@ pip install -r requirements.txt
 ```bash
 python3 run_all.py
 ```
+All modules launch automatically, including VirusTotal integration (port 6004 if standalone).
 
-You’ll see:
-```
-[*] Launching Domain Classifier (6001) ...
-[*] Launching Anomaly Detector (6002) ...
-[*] Launching WHOIS Analyzer (6003) ...
-[*] Launching API Handler (5000) ...
-[*] Launching Dashboard (8080) ...
-✅ All services launched successfully!
-```
-
-### Access the Dashboard
-Open your browser and navigate to:  
-👉 **http://127.0.0.1:8080**
-
-### Test from Command Line
+### Test a domain
 ```bash
-# Evaluate a domain directly
-curl -s -X POST http://127.0.0.1:5000/evaluate   -H "Content-Type: application/json"   -d '{"domain": "example.com", "client_ip": "127.0.0.1"}' | jq
-```
-
-### Check an analyzer report
-```bash
-curl -s http://127.0.0.1:5000/report/example.com | jq -r '.narrative'
+curl -s -X POST http://127.0.0.1:5000/evaluate   -H "Content-Type: application/json"   -d '{"domain": "example.com"}' | jq
 ```
 
 ---
 
-## 📊 Dashboard Preview
+## 📊 Dashboard
 
-_Add screenshots here:_  
-- `/screenshots/dashboard_main.png`  
-- `/screenshots/report_example.png`  
-
----
-
-## 🧠 How It Works
-
-Each incoming domain query flows through **three independent analyzers**, each scoring the request on a risk scale:
-
-| Module | Checks | Output |
-|--------|---------|---------|
-| Domain Classifier | Lexical ML model (entropy, length, TLD, digits) | Risk score (0–1) |
-| WHOIS Analyzer | Domain age, registrar reputation, privacy shield | Risk score (0–1) |
-| Anomaly Detector | Domain frequency vs historical behavior | Risk score (0–1) |
-
-Results are weighted according to `engine_config.py`:
-```python
-MODULE_WEIGHTS = {
-    "domain_classifier": 1,
-    "anomaly_detector": 1,
-    "whois_analyzer": 1
-}
-DECISION_THRESHOLD = 1  # >=1 modules flag → BLOCK
-```
-
-If total weighted score ≥ threshold → domain is **BLOCKED** and recorded in `/reports/`.
+Visit **http://127.0.0.1:8080** to view:
+- Blocked & allowed domains  
+- Live verdicts per module  
+- AI-generated explanations ("Ask Why a Domain Was Blocked")  
+- VirusTotal enrichment results  
 
 ---
 
-## 🧠 Example Output Narrative
+## 📁 Folder Structure
 
 ```
-The query **QX-e9fa657a** from client **127.0.0.1**
-attempted to reach **example.com** at 2025-10-18T16:33:33.
+NetSentinel-CyberGuardians/
+├── ai_modules/
+│   ├── domain_classifier.py
+│   ├── anomaly_detector.py
+│   ├── whois_analyzer.py
+│   ├── virustotal_analyzer.py
+│   ├── model_domain.pkl
+│   └── train_domain_model.py
+├── engine.py
+├── engine_config.py
+├── api_handler.py
+├── dashboard.py
+├── templates/dashboard.html
+├── reports/
+├── lists/
+├── database/
+│   └── dns_logs.db
+└── run_all.py
+```
 
-The system classified this request with a **final verdict of BLOCK**,
-based on analyzer consensus and weighted risk scoring.
+---
 
-- Domain Classifier → ✅ Allowed (score=0.2). Legitimate lexical profile.
-- Anomaly Detector → ⚠️ Flagged (score=10). Domain never seen before from this client.
-- WHOIS Analyzer → ⚠️ Flagged (score=0.7). Recently registered domain.
+## 🧾 Example Narrative Output
 
-🧾 **Final Verdict:** BLOCK with total risk score 2 (threshold 1)
+```
+The query QX-b238cee6 from client 127.0.0.1 attempted to reach phishing-login.xyz at 2025-10-18T16:33:33.
+
+Final verdict: **BLOCK** (score=3, threshold=1).
+
+- Domain Classifier → ⚠️ Flagged (score=0.73) — ML model detected phishing-like entropy.
+- Anomaly Detector → ⚠️ Flagged (score=10) — Never seen before for this client.
+- WHOIS Analyzer → ⚠️ Flagged — Recently registered (< 15 days old).
+- VirusTotal → ⚠️ Flagged — 12 vendors detected as phishing.
+
+🧾 **Overall Verdict:** BLOCK — Domain correlated across AI + global threat feeds.
 ```
 
 ---
 
 ## 🛠️ Future Enhancements
 
-- 🔬 Tier-2 content analyzer (HTTP fetch + favicon hash)
-- ☁️ Cloud dashboard integration with Grafana
-- 🧱 RPZ feed ingestion for external blocklists
-- 🕵️ Malware sandbox integration for detonation analysis
-- 🤖 GPT-powered chatbot for natural-language log queries
+- 🧠 Machine Learning retraining pipeline (auto-update)
+- 🔬 Tier-2 web-content signature hashing
+- ☁️ Grafana / Loki visualization
+- 🧱 RPZ ingestion for external blocklists
+- 🕵️ Malware sandbox testing (air-gapped)
+- 🤖 Chatbot module for interactive investigation
 
 ---
 
 ## 🧑‍💻 License
 
 MIT License © 2025 — Team Cyber Guardians  
-Permission granted for academic and research use.
+For educational and research use.
 
 ---
 
 ## 📞 Contact
 
-For collaboration or bug reports:  
-📧 **netsentinel@cyberguardians.tech**  
-🌐 [github.com/NetSentinel-CyberGuardians](https://github.com/NetSentinel-CyberGuardians)
-
----
+**Email:** netsentinel@cyberguardians.tech  
+**GitHub:** [NetSentinel-CyberGuardians](https://github.com/NetSentinel-CyberGuardians)
 
 > “**Prevent. Detect. Respond.** — NetSentinel guards your network in real time.”
