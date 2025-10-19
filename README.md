@@ -4,7 +4,7 @@
 **Developed by:**  
 - Ameen Siddiqui — Backend & DNS Engine  
 - Ahmed Hussein — WHOIS & NLP Analyzer  
-- Farzain Ali — Data & Behavior Analytics  
+- Mohamed Ibrahim Idris — Data & Behavior Analytics  
 
 ---
 
