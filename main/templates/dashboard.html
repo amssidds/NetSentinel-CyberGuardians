@@ -86,7 +86,8 @@ body.dark pre{background:#1e293b;}
       <button class="gray" onclick="pagePrev('blocked')">◀ Prev</button>
       <span id="blockedPage">Page 1</span>
       <button class="gray" onclick="pageNext('blocked')">Next ▶</button>
-      <button class="red" onclick="clearList('block')">🗑 Clear</button>
+      <!-- Clear ONLY blocked logs -->
+      <button class="red" onclick="clearLogs('blocked')">🗑 Clear</button>
     </div>
   </div>
 
@@ -97,7 +98,8 @@ body.dark pre{background:#1e293b;}
       <button class="gray" onclick="pagePrev('allowed')">◀ Prev</button>
       <span id="allowedPage">Page 1</span>
       <button class="gray" onclick="pageNext('allowed')">Next ▶</button>
-      <button class="red" onclick="clearList('allow')">🗑 Clear</button>
+      <!-- Clear ONLY allowed logs -->
+      <button class="red" onclick="clearLogs('allowed')">🗑 Clear</button>
     </div>
   </div>
 </section>
@@ -140,6 +142,7 @@ function paginate(arr,page){return arr.slice((page-1)*PAGE_SIZE,(page)*PAGE_SIZE
 function setPageLabel(k,total){document.getElementById(k+'Page').textContent=`Page ${pages[k]} of ${Math.ceil(total/PAGE_SIZE)||1}`;}
 function riskClass(score){if(score>0.7)return' risk-high';if(score>0.4)return' risk-mid';return' risk-low';}
 
+/* === DATA LOAD === */
 async function loadAll(){
   const [lgs,lst]=await Promise.all([fetch('/api/logs').then(r=>r.json()),fetch('/api/lists').then(r=>r.json())]);
   logs=lgs||[];lists=lst||{};
@@ -160,7 +163,6 @@ function renderTable(kind,rows,listFile){
   const body=document.getElementById(kind+'Body');body.innerHTML='';
   const pageRows=paginate(rows,pages[kind]);
   for(const r of pageRows){
-    const inList=(listFile||[]).includes(r.domain);
     const score=r.tier2_score!==undefined?Number(r.tier2_score):null;
     const bar=score!==null?`<div class="riskbar${riskClass(score)}" title="${score.toFixed(2)}"></div>`:'-';
     body.innerHTML+=`
@@ -171,7 +173,8 @@ function renderTable(kind,rows,listFile){
       <td style="text-align:center">${bar}</td>
       <td>
         <button onclick="showDetails('${r.query_id}')">🔍</button>
-        ${inList?'<button class="red" onclick="removeFromList(\''+kind.replace('ed','')+'\',\''+r.domain+'\')">🗑</button>':'—'}
+        <!-- row delete = remove log entry -->
+        <button class="red" onclick="deleteLog('${r.query_id}')">🗑</button>
       </td>
     </tr>`;
   }
@@ -180,11 +183,46 @@ function renderTable(kind,rows,listFile){
 
 function pageNext(k){pages[k]++;loadAll();}
 function pagePrev(k){if(pages[k]>1){pages[k]--;loadAll();}}
+
+/* (keep list helpers if you still use them elsewhere) */
 async function removeFromList(type,domain){if(!confirm('Remove '+domain+' from '+type+'list?'))return;
   await fetch('/api/lists/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,domain})});loadAll();}
 async function clearList(type){if(!confirm('Clear '+type+' list?'))return;
   await fetch('/api/lists/clear',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type})});loadAll();}
 
+/* === NEW: log delete / clear === */
+async function deleteLog(qid){
+  if(!confirm('Delete this log entry?')) return;
+  try{
+    const r = await fetch('/api/logs/delete', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ query_id: qid })
+    });
+    const ct = r.headers.get('content-type')||'';
+    const data = ct.includes('application/json') ? await r.json() : {error: await r.text()};
+    if(!r.ok || data.error){ alert('Delete failed: ' + (data.error || r.status)); return; }
+    if(!data.ok || data.deleted === 0){ alert('Nothing deleted (query_id not found).'); return; }
+    loadAll();
+  }catch(e){ alert('Delete failed: ' + e); }
+}
+
+async function clearLogs(scope){  // 'blocked' or 'allowed'
+  if(!confirm('Clear '+scope+' logs?')) return;
+  try{
+    const r = await fetch('/api/logs/clear', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ scope })
+    });
+    const ct = r.headers.get('content-type')||'';
+    const data = ct.includes('application/json') ? await r.json() : {error: await r.text()};
+    if(!r.ok || data.error){ alert('Clear failed: ' + (data.error || r.status)); return; }
+    loadAll();
+  }catch(e){ alert('Clear failed: ' + e); }
+}
+
+/* === Ask Why === */
 async function askReason(){
   const q=document.getElementById('askInput').value.trim();
   const out=document.getElementById('chatOutput');
@@ -202,20 +240,38 @@ async function askReason(){
   }catch(e){out.textContent='⚠️ Error fetching report.';}
 }
 
-/* === MODAL === */
-function showDetails(qid){
-  const row=logs.find(x=>x.query_id===qid);
-  if(!row){alert("No details found.");return;}
+/* === MODAL (Tier-2 via proxy /api/tier2) === */
+async function showDetails(qid){
   const modal=document.getElementById('detailsModal');
-  document.getElementById('modalTitle').textContent=`Tier-2 Intelligence for ${row.domain}`;
-  document.getElementById('modalBody').innerHTML=`
-    <p><b>Tier-2 Score:</b> ${row.tier2_score!==undefined?Number(row.tier2_score).toFixed(2):'-'}</p>
-    <h4>🔎 Threat Intel (VirusTotal)</h4>
-    <pre>${row.tier2_intel?JSON.stringify(row.tier2_intel,null,2):'No data'}</pre>
-    <h4>🌐 URL Enrichment</h4>
-    <pre>${row.tier2_enrichment?JSON.stringify(row.tier2_enrichment,null,2):'No data'}</pre>`;
+  const title=document.getElementById('modalTitle');
+  const body=document.getElementById('modalBody');
+
+  title.textContent="Tier-2 Intelligence";
+  body.innerHTML="<p>Computing Tier-2… ⏳</p>";
   modal.style.display='block';
+
+  try{
+    const r=await fetch(`/api/tier2/${encodeURIComponent(qid)}`);
+    const ct=r.headers.get('content-type')||'';
+    const data=ct.includes('application/json')?await r.json():{error:await r.text()};
+    if(!r.ok||data.error){ body.innerHTML=`<p>⚠️ ${data.error||'Tier-2 lookup failed.'}</p>`; return; }
+
+    const intel=data.tier2_intel||{};
+    const enrich=data.tier2_enrichment||{};
+    const score=Number(data.tier2_score||0).toFixed(2);
+
+    title.textContent=`Tier-2 Intelligence for ${data.domain}`;
+    body.innerHTML=`
+      <p><b>Tier-2 Score:</b> ${score}</p>
+      <h4>🔎 Threat Intel (VirusTotal)</h4>
+      <pre>${Object.keys(intel).length?JSON.stringify(intel,null,2):'No data'}</pre>
+      <h4>🌐 URL Enrichment</h4>
+      <pre>${Object.keys(enrich).length?JSON.stringify(enrich,null,2):'No data'}</pre>`;
+  }catch(e){
+    body.innerHTML=`<p>⚠️ ${e}</p>`;
+  }
 }
+
 function closeModal(){document.getElementById('detailsModal').style.display='none';}
 window.onclick=e=>{if(e.target==document.getElementById('detailsModal'))closeModal();}
 
