@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "flag": 1,
+  "score": 1,
+  "reason": "ok",
+  "query_id": "QX-84dbd9ba",
+  "module": "anomaly_detector",
+  "domain": "google.com"
+}

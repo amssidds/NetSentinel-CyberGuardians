@@ -1,4 +1,3 @@
-# engine.py
 import os
 import json
 import sqlite3
@@ -7,6 +6,7 @@ import uuid
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import engine_config as cfg
+from ai_modules.url_enricher import enrich_url  
 
 
 # --- Ensure DB and folders exist ---
@@ -95,36 +95,26 @@ def aggregate_results(modules_results):
     return total, verdict, "; ".join(reasons)
 
 
-def log_decision(query_id, domain, client_ip, score, verdict, reasons, modules_results):
-    conn = sqlite3.connect(cfg.DB_PATH)
-    cur = conn.cursor()
-    cur.execute("""
-        INSERT INTO logs (query_id, domain, client_ip, score, verdict, reasons, modules_result, ts)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """, (query_id, domain, client_ip, score, verdict, reasons,
-          json.dumps(modules_results), datetime.datetime.utcnow().isoformat()))
-    conn.commit()
-    conn.close()
-
-
 # --- Main Evaluation ---
 def evaluate_domain(domain, client_ip="unknown"):
     ensure_db()
     query_id = new_query_id()
 
+    # --- Check Allow/Block Lists ---
     if in_list(cfg.ALLOWLIST_FILE, domain):
         verdict, score, reasons = "ALLOW", 0, "allowlisted"
-        log_decision(query_id, domain, client_ip, score, verdict, reasons, {})
+        _log_simple(query_id, domain, client_ip, score, verdict, reasons)
         return {"query_id": query_id, "domain": domain, "verdict": verdict, "reason": reasons}
 
     if in_list(cfg.BLOCKLIST_FILE, domain):
         verdict, score, reasons = "BLOCK", cfg.DECISION_THRESHOLD, "blocklisted"
-        log_decision(query_id, domain, client_ip, score, verdict, reasons, {})
+        _log_simple(query_id, domain, client_ip, score, verdict, reasons)
         return {"query_id": query_id, "domain": domain, "verdict": verdict, "reason": reasons}
 
-    # Run modules
+    # --- Tier 1: Run core AI modules ---
     payload = {"query_id": query_id, "domain": domain, "client_ip": client_ip}
     modules_results = {}
+
     with ThreadPoolExecutor(max_workers=len(cfg.MODULE_ENDPOINTS)) as executor:
         futures = {executor.submit(call_module, name, url, payload): name
                    for name, url in cfg.MODULE_ENDPOINTS.items()}
@@ -136,7 +126,34 @@ def evaluate_domain(domain, client_ip="unknown"):
 
     score, verdict, reasons = aggregate_results(modules_results)
     add_to_list(cfg.BLOCKLIST_FILE if verdict == "BLOCK" else cfg.ALLOWLIST_FILE, domain)
-    log_decision(query_id, domain, client_ip, score, verdict, reasons, modules_results)
+
+    # --- Tier 2: URL Enrichment (Redirects, Metadata, Favicon) ---
+    try:
+        enrichment_data = enrich_url(domain)
+        tier2_enrichment_json = json.dumps(enrichment_data)
+        print(f"[Tier2] Enricher: {domain} -> "
+              f"{enrichment_data.get('redirects')} hops, "
+              f"final {enrichment_data.get('final_url')}, "
+              f"meta {enrichment_data.get('meta_score')}")
+    except Exception as e:
+        print(f"[Tier2] Enricher failed for {domain}: {e}")
+        enrichment_data = {}
+        tier2_enrichment_json = json.dumps({})
+
+    # --- Log final decision + enrichment ---
+    conn = sqlite3.connect(cfg.DB_PATH)
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO logs (query_id, domain, client_ip, score, verdict, reasons,
+                          modules_result, tier2_enrichment, ts)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        query_id, domain, client_ip, score, verdict, reasons,
+        json.dumps(modules_results), tier2_enrichment_json,
+        datetime.datetime.utcnow().isoformat()
+    ))
+    conn.commit()
+    conn.close()
 
     return {
         "query_id": query_id,
@@ -145,5 +162,18 @@ def evaluate_domain(domain, client_ip="unknown"):
         "score": score,
         "verdict": verdict,
         "reasons": reasons,
-        "modules": modules_results
+        "modules": modules_results,
+        "tier2_enrichment": enrichment_data
     }
+
+
+def _log_simple(query_id, domain, client_ip, score, verdict, reasons):
+    conn = sqlite3.connect(cfg.DB_PATH)
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO logs (query_id, domain, client_ip, score, verdict, reasons, ts)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (query_id, domain, client_ip, score, verdict, reasons,
+          datetime.datetime.utcnow().isoformat()))
+    conn.commit()
+    conn.close()
