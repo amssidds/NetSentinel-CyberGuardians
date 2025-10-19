@@ -1,15 +1,15 @@
 # dashboard.py
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, request
 import sqlite3, os
+import requests  # proxy to the API handler (port 5000)
 import engine_config as cfg
-import requests  # used to proxy to the API handler (port 5000)
 
 app = Flask(__name__)
 
-API_BASE = "http://127.0.0.1:5000"
+API_BASE = "http://127.0.0.1:5000"  # api_handler.py runs here
 
-# === Utility: get logs ===
-def get_logs(limit=50):
+# === Local helpers (read-only from the same DB) ===
+def get_logs(limit=200):
     conn = sqlite3.connect(cfg.DB_PATH)
     cur = conn.cursor()
     cur.execute("""
@@ -40,19 +40,18 @@ def get_logs(limit=50):
         data.append(entry)
     return data
 
-
-# === Utility: read allow/block lists ===
 def read_list(fname):
     if not os.path.exists(fname):
         return []
     with open(fname) as f:
         return [x.strip() for x in f if x.strip()]
 
-# === Routes ===
+# === UI ===
 @app.route("/")
 def dashboard():
     return render_template("dashboard.html")
 
+# === Local JSON (readers) ===
 @app.route("/api/logs")
 def api_logs():
     return jsonify(get_logs())
@@ -68,16 +67,72 @@ def api_lists():
         "block_count": len(blocklist)
     })
 
-# ---- NEW: proxy to API handler to avoid CORS / cross-port issues ----
+# === Proxies to API handler (writes / compute) ===
 @app.route("/api/report/<query>")
 def api_report(query):
     try:
-        r = requests.get(f"{API_BASE}/report/{query}", timeout=5)
-        # Pass through API JSON and status code
+        r = requests.get(f"{API_BASE}/report/{query}", timeout=10)
         return (r.text, r.status_code, {"Content-Type": "application/json"})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"proxy report failed: {e}"}), 502
+
+# Tier-2 (used by 🔍)
+@app.route("/api/tier2/<query_id>")
+def api_tier2(query_id):
+    try:
+        r = requests.get(f"{API_BASE}/api/tier2/{query_id}", timeout=20)
+        ctype = r.headers.get("Content-Type", "application/json")
+        return (r.text, r.status_code, {"Content-Type": ctype})
+    except Exception as e:
+        return jsonify({"error": f"proxy tier2 failed: {e}"}), 502
+
+# NEW: delete one log row
+@app.route("/api/logs/delete", methods=["POST"])
+def api_logs_delete_proxy():
+    try:
+        r = requests.post(f"{API_BASE}/api/logs/delete",
+                          json=request.get_json(silent=True), timeout=10)
+        return (r.text, r.status_code, {"Content-Type": "application/json"})
+    except Exception as e:
+        return jsonify({"error": f"proxy logs.delete failed: {e}"}), 502
+
+# NEW: clear logs by scope (blocked|allowed|all)
+@app.route("/api/logs/clear", methods=["POST"])
+def api_logs_clear_proxy():
+    try:
+        r = requests.post(f"{API_BASE}/api/logs/clear",
+                          json=request.get_json(silent=True), timeout=20)
+        return (r.text, r.status_code, {"Content-Type": "application/json"})
+    except Exception as e:
+        return jsonify({"error": f"proxy logs.clear failed: {e}"}), 502
+
+# (optional — keep list write proxies if you still use them elsewhere)
+@app.route("/api/lists/add", methods=["POST"])
+def api_lists_add_proxy():
+    try:
+        r = requests.post(f"{API_BASE}/api/lists/add",
+                          json=request.get_json(silent=True), timeout=10)
+        return (r.text, r.status_code, {"Content-Type": "application/json"})
+    except Exception as e:
+        return jsonify({"error": f"proxy add failed: {e}"}), 502
+
+@app.route("/api/lists/remove", methods=["POST"])
+def api_lists_remove_proxy():
+    try:
+        r = requests.post(f"{API_BASE}/api/lists/remove",
+                          json=request.get_json(silent=True), timeout=10)
+        return (r.text, r.status_code, {"Content-Type": "application/json"})
+    except Exception as e:
+        return jsonify({"error": f"proxy remove failed: {e}"}), 502
+
+@app.route("/api/lists/clear", methods=["POST"])
+def api_lists_clear_proxy():
+    try:
+        r = requests.post(f"{API_BASE}/api/lists/clear",
+                          json=request.get_json(silent=True), timeout=10)
+        return (r.text, r.status_code, {"Content-Type": "application/json"})
+    except Exception as e:
+        return jsonify({"error": f"proxy clear failed: {e}"}), 502
 
 if __name__ == "__main__":
-    # Debug True only for local use
-    app.run(host="0.0.0.0", port=8080, debug=True)
+    app.run(host="0.0.0.0", port=8080, debug=False, threaded=True)
