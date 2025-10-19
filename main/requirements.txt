@@ -1,9 +1,23 @@
+# === Core Frameworks ===
 flask
+requests
+
+# === Machine Learning & Data Processing ===
 scikit-learn
 pandas
 numpy
-requests
-python-whois
-sqlite-utils
 
+# === Domain Intelligence & Parsing ===
+tldextract
 python-whois
+PyYAML
+
+# === Dashboard & Visualization ===
+matplotlib
+chart-studio
+jinja2
+
+# === Optional / Utility ===
+beautifulsoup4
+idna
+urllib3

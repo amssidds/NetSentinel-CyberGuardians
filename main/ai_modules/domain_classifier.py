@@ -12,7 +12,7 @@ app = Flask(__name__)
 #MODEL_PATH = os.path.join(os.path.dirname(__file__), "model_domain.pkl")
 
 MODEL_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "model_domain.pkl"))
-print("🔍 Model path:", MODEL_PATH)
+print("Model path:", MODEL_PATH)
 
 
 # === Load model once at startup ===
@@ -20,11 +20,11 @@ model = None
 if os.path.exists(MODEL_PATH):
     try:
         model = joblib.load(MODEL_PATH)
-        print("✅ Domain Classifier model loaded successfully.")
+        print("Domain Classifier model loaded successfully.")
     except Exception as e:
-        print("⚠️ Error loading model:", e)
+        print("Error loading model:", e)
 else:
-    print("⚠️ model_domain.pkl not found.")
+    print("model_domain.pkl not found.")
 
 # === Helper: entropy calculation ===
 def calculate_entropy(string):

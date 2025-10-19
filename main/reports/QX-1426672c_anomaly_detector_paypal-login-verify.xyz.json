@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "flag": 1,
+  "score": 1,
+  "reason": "ok",
+  "query_id": "QX-1426672c",
+  "module": "anomaly_detector",
+  "domain": "paypal-login-verify.xyz"
+}

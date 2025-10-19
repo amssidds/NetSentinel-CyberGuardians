@@ -1,3 +1,4 @@
+# api_handler.py
 from flask import Flask, request, jsonify
 from ai_modules.url_enricher import enrich_url
 from ai_modules.threat_intel import vt_check
@@ -8,6 +9,7 @@ import engine_config as cfg
 app = Flask(__name__)
 ensure_db()
 
+# ---------- Utility helpers ----------
 def _read_list(path):
     if not os.path.exists(path):
         return []
@@ -21,6 +23,7 @@ def _write_list(path, items):
         for d in items:
             f.write(d + "\n")
 
+# ---------- Routes ----------
 @app.route("/", methods=["GET"])
 def home():
     return jsonify({
@@ -44,11 +47,18 @@ def evaluate():
     client_ip = data.get("client_ip", request.remote_addr or "unknown")
     if not domain:
         return jsonify({"error": "Missing 'domain'"}), 400
-    result = evaluate_domain(domain, client_ip)
+
+    try:
+        result = evaluate_domain(domain, client_ip)
+    except Exception as e:
+        # Gracefully handle dependency issues (e.g., domain classifier offline)
+        return jsonify({"error": f"Evaluation failed: {str(e)}"}), 503
+
     avg_score = result.get("score", 0)
     tier2_score = 0
     enrichment = {}
     intel = {}
+
     if avg_score > 0.5:
         enrichment = enrich_url(domain)
         intel = vt_check(domain)
@@ -57,7 +67,12 @@ def evaluate():
         result["tier2_intel"] = intel
         result["tier2_score"] = tier2_score
         result["score"] = round((avg_score * 0.9) + (tier2_score * 0.1), 2)
-        result["verdict"] = "MALICIOUS" if result["score"] > 0.7 else "SUSPICIOUS" if result["score"] > 0.5 else "LEGIT"
+        result["verdict"] = (
+            "MALICIOUS" if result["score"] > 0.7
+            else "SUSPICIOUS" if result["score"] > 0.5
+            else "LEGIT"
+        )
+
     return jsonify(result)
 
 @app.route("/api/logs", methods=["GET"])
@@ -172,5 +187,6 @@ def get_report(query_or_domain):
         story.append("🧩 Combined verdict derived from analyzer modules.")
         return jsonify({"domain": q, "narrative": "\n".join(story)})
 
+# ---------- Main ----------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(host="0.0.0.0", port=5000, threaded=True)
