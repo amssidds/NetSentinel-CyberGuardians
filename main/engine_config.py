@@ -1,12 +1,5 @@
 import os
-from dotenv import load_dotenv
 
-load_dotenv()
-VIRUSTOTAL_API_KEY = os.getenv("VIRUSTOTAL_API_KEY")
-
-if not VIRUSTOTAL_API_KEY:
-    print("⚠️  VirusTotal API key not found — please set in .env file")
-    
 # === Directory Paths ===
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "database", "dns_logs.db")
@@ -28,7 +21,7 @@ MODULE_WEIGHTS = {
 }
 
 # === Decision Logic ===
-DECISION_THRESHOLD = 2   # block if >= 2 modules flag suspicious
+DECISION_THRESHOLD = 1   # block if >= 2 modules flag suspicious
 
 # === File paths for lists ===
 ALLOWLIST_FILE = os.path.join(LISTS_DIR, "allowlist.txt")

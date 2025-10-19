@@ -1,9 +1,0 @@
-{
-  "ok": false,
-  "flag": 0,
-  "score": 0,
-  "reason": "no-response",
-  "query_id": "QX-84dbd9ba",
-  "module": "domain_classifier",
-  "domain": "google.com"
-}
