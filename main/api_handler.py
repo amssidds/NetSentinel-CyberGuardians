@@ -1,9 +1,5 @@
 # api_handler.py
-
-
 from flask import Flask, request, jsonify
-from ai_modules.url_enricher import enrich_url
-from ai_modules.threat_intel import vt_check
 import sqlite3, json, glob, os
 from engine import evaluate_domain, ensure_db
 import engine_config as cfg
@@ -27,6 +23,45 @@ def _write_list(path, items):
         for d in items:
             f.write(d + "\n")
 
+def _get_log_by_qid(qid):
+    conn = sqlite3.connect(cfg.DB_PATH)
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT query_id, domain, client_ip, score, verdict, ts,
+               COALESCE(tier2_intel, ''), COALESCE(tier2_enrichment, ''), COALESCE(tier2_score, 0.0)
+          FROM logs
+         WHERE query_id = ?
+         ORDER BY id DESC LIMIT 1
+    """, (qid,))
+    row = cur.fetchone()
+    conn.close()
+    if not row:
+        return None
+    return {
+        "query_id": row[0],
+        "domain": row[1],
+        "client_ip": row[2],
+        "score": row[3],
+        "verdict": row[4],
+        "timestamp": row[5],
+        "tier2_intel": json.loads(row[6]) if row[6] else None,
+        "tier2_enrichment": json.loads(row[7]) if row[7] else None,
+        "tier2_score": row[8],
+    }
+
+def _update_tier2(query_id, intel_obj, enrich_obj, score):
+    conn = sqlite3.connect(cfg.DB_PATH)
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE logs
+           SET tier2_intel = ?,
+               tier2_enrichment = ?,
+               tier2_score = ?
+         WHERE query_id = ?
+    """, (json.dumps(intel_obj or {}), json.dumps(enrich_obj or {}), float(score or 0.0), query_id))
+    conn.commit()
+    conn.close()
+
 # ---------- Routes ----------
 @app.route("/", methods=["GET"])
 def home():
@@ -40,6 +75,9 @@ def home():
             "/api/lists/add",
             "/api/lists/remove",
             "/api/lists/clear",
+            "/api/logs/delete",
+            "/api/logs/clear",
+            "/api/tier2/<query_id>",
             "/report/<query_or_domain>"
         ]
     })
@@ -55,10 +93,9 @@ def evaluate():
     try:
         result = evaluate_domain(domain, client_ip)
     except Exception as e:
-        # Gracefully handle dependency issues (e.g., domain classifier offline)
         return jsonify({"error": f"Evaluation failed: {str(e)}"}), 503
 
-    # --- Tier-2: always run enrichment and threat intel ---
+    # --- Tier-2: enrichment + threat intel ---
     enrichment = {}
     intel = {}
     try:
@@ -71,26 +108,22 @@ def evaluate():
     except Exception as e:
         intel = {"intel_score": 0.0, "error": str(e)}
 
-    meta_score = enrichment.get("meta_score", 0.0)
-    intel_score = intel.get("intel_score", 0.0)
+    meta_score = float(enrichment.get("meta_score", 0.0) or 0.0)
+    intel_score = float(intel.get("intel_score", 0.0) or 0.0)
     tier2_score = round((meta_score + intel_score) / 2, 3)
 
-    # Merge Tier-2 results
     result["tier2_enrichment"] = enrichment
     result["tier2_intel"] = intel
     result["tier2_score"] = tier2_score
 
-    # Recalculate total score + verdict
-    avg_score = result.get("score", 0)
+    avg_score = float(result.get("score", 0.0) or 0.0)
     result["score"] = round((avg_score * 0.9) + (tier2_score * 0.1), 2)
     result["verdict"] = (
         "MALICIOUS" if result["score"] > 0.7
         else "SUSPICIOUS" if result["score"] > 0.5
         else "LEGIT"
     )
-
     return jsonify(result)
-
 
 @app.route("/api/logs", methods=["GET"])
 @app.route("/logs", methods=["GET"])
@@ -203,6 +236,58 @@ def get_report(query_or_domain):
             story.append(f"- **{module.replace('_',' ').title()}** → {flag} as *{label}* (score={score_mod}). {reason}")
         story.append("🧩 Combined verdict derived from analyzer modules.")
         return jsonify({"domain": q, "narrative": "\n".join(story)})
+
+@app.route("/api/tier2/<query_id>")
+def api_tier2(query_id):
+    row = _get_log_by_qid(query_id)
+    if not row:
+        return jsonify({"error": "query_id not found"}), 404
+    if row.get("tier2_intel") or row.get("tier2_enrichment"):
+        return jsonify(row)
+
+    domain = row["domain"]
+    intel  = vt_check(domain)        # {positives, sources, intel_score}
+    enrich = enrich_url(domain)      # {final_url, redirects, meta_score, favicon_hash, ...}
+
+    intel_score = float((intel or {}).get("intel_score", 0.0) or 0.0)
+    meta_score  = float((enrich or {}).get("meta_score", 0.0) or 0.0)
+    t2_score    = round(min(intel_score*0.7 + meta_score*0.3, 1.0), 3)
+
+    _update_tier2(query_id, intel, enrich, t2_score)
+    row = _get_log_by_qid(query_id)
+    return jsonify(row)
+
+# ---------- NEW: log delete / clear ----------
+@app.route("/api/logs/delete", methods=["POST"])
+def api_logs_delete():
+    data = request.get_json(force=True) or {}
+    qid = (data.get("query_id") or "").strip()
+    if not qid:
+        return jsonify({"error": "query_id required"}), 400
+    conn = sqlite3.connect(cfg.DB_PATH)
+    cur = conn.cursor()
+    cur.execute("DELETE FROM logs WHERE query_id = ?", (qid,))
+    deleted = cur.rowcount
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "deleted": int(deleted)})
+
+@app.route("/api/logs/clear", methods=["POST"])
+def api_logs_clear():
+    data = request.get_json(force=True) or {}
+    scope = (data.get("scope") or "all").lower()
+    conn = sqlite3.connect(cfg.DB_PATH)
+    cur = conn.cursor()
+    if scope == "blocked":
+        cur.execute("DELETE FROM logs WHERE verdict IN ('BLOCK','MALICIOUS')")
+    elif scope == "allowed":
+        cur.execute("DELETE FROM logs WHERE verdict IN ('ALLOW','LEGIT')")
+    else:
+        cur.execute("DELETE FROM logs")
+    deleted = cur.rowcount
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "deleted": int(deleted), "scope": scope})
 
 # ---------- Main ----------
 if __name__ == "__main__":
