@@ -5,30 +5,71 @@
 <title>NetSentinel Live Dashboard</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-:root{--bg:#f7f9fc;--card:#fff;--border:#e5e7eb;--blue:#3b82f6;--red:#ef4444;--orange:#f59e0b;--green:#22c55e;--muted:#6b7280}
-body{font-family:"Segoe UI",sans-serif;background:var(--bg);margin:0;color:#111}
-header{background:var(--card);padding:20px;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,0.05)}
-h1{margin:0;color:#0a58ca;display:flex;justify-content:center;align-items:center;gap:8px}
+:root{
+  --bg:#f7f9fc;--card:#fff;--border:#e5e7eb;
+  --blue:#3b82f6;--red:#ef4444;--orange:#f59e0b;--green:#22c55e;--text:#111;
+  --muted:#6b7280;--shadow:rgba(0,0,0,0.08);
+  transition:background 0.3s,color 0.3s;
+}
+body.dark{
+  --bg:#0f172a;--card:#1e293b;--border:#334155;
+  --blue:#60a5fa;--red:#f87171;--orange:#fbbf24;--green:#4ade80;--text:#e2e8f0;
+  --shadow:rgba(255,255,255,0.06);
+}
+body{font-family:"Segoe UI",sans-serif;background:var(--bg);margin:0;color:var(--text);transition:all .3s}
+header{background:var(--card);padding:20px;text-align:center;box-shadow:0 2px 6px var(--shadow);display:flex;justify-content:space-between;align-items:center}
+h1{margin:0;color:var(--blue);display:flex;align-items:center;gap:8px}
 .shield{font-size:28px}
+#themeToggle{background:none;border:none;cursor:pointer;font-size:22px;color:var(--text);transition:transform .2s}
+#themeToggle:hover{transform:scale(1.2)}
+
 .cards{display:flex;justify-content:space-around;flex-wrap:wrap;margin:20px;gap:15px}
 .card{flex:1;min-width:200px;padding:20px;border-radius:12px;text-align:center;color:#fff;box-shadow:0 2px 6px rgba(0,0,0,0.1)}
 .blue{background:var(--blue)}.red{background:var(--red)}.orange{background:var(--orange)}.green{background:var(--green)}
 .card h2{margin:0;font-size:16px}.card p{margin:8px 0 0;font-size:32px;font-weight:bold}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:20px}
-.panel{background:var(--card);border-radius:10px;box-shadow:0 2px 6px rgba(0,0,0,0.08);padding:14px}
-.title{font-weight:bold;margin:4px 0 8px}.actions{display:flex;justify-content:space-between;align-items:center;margin-top:8px}
-button{background:var(--blue);border:none;color:#fff;border-radius:6px;padding:8px 12px;cursor:pointer}
+.panel{background:var(--card);border-radius:10px;box-shadow:0 2px 6px var(--shadow);padding:14px}
+.title{font-weight:bold;margin:4px 0 8px}
+.actions{display:flex;justify-content:space-between;align-items:center;margin-top:8px}
+button{background:var(--blue);border:none;color:#fff;border-radius:6px;padding:8px 12px;cursor:pointer;transition:all 0.2s}
+button:hover{opacity:0.9;transform:scale(1.02);}
 button.red{background:var(--red)}button.gray{background:#64748b}
 table{width:100%;border-collapse:collapse}
 th,td{padding:8px 10px;border-bottom:1px solid var(--border)}thead{background:#f1f5f9}
-.chat{background:var(--card);margin:20px;border-radius:10px;padding:16px;box-shadow:0 2px 6px rgba(0,0,0,0.08)}
-.chat h3{color:#2563eb;margin-top:0}
-input[type=text]{width:80%;padding:8px;border:1px solid var(--border);border-radius:6px}
-#chatOutput{margin-top:10px;white-space:pre-wrap;font-family:monospace;color:#333;border:1px dashed var(--border);border-radius:6px;padding:10px;min-height:70px;background:#fafafa}
+body.dark thead{background:#1e293b}
+.chat{background:var(--card);margin:20px;border-radius:10px;padding:16px;box-shadow:0 2px 6px var(--shadow)}
+.chat h3{color:var(--blue);margin-top:0}
+input[type=text]{width:80%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)}
+#chatOutput{margin-top:10px;white-space:pre-wrap;font-family:monospace;color:var(--text);
+  border:1px dashed var(--border);border-radius:6px;padding:10px;min-height:70px;background:var(--card)}
+
+/* === Risk bar === */
+.riskbar{height:8px;border-radius:4px;width:60px;background:#d1d5db;margin:auto}
+.risk-low{background:var(--green)}
+.risk-mid{background:var(--orange)}
+.risk-high{background:var(--red)}
+
+/* === Modal with animation === */
+#detailsModal{display:none;position:fixed;z-index:999;left:0;top:0;width:100%;height:100%;
+  background:rgba(0,0,0,0.4);backdrop-filter:blur(4px);animation:fadeIn 0.3s ease forwards;}
+@keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
+.modal-content{background:var(--card);margin:10% auto;padding:20px;border-radius:12px;
+  width:80%;max-width:650px;box-shadow:0 4px 15px var(--shadow);
+  transform:translateY(-40px);animation:slideDown 0.3s ease forwards;}
+@keyframes slideDown{to{transform:translateY(0);}}
+.modal-header{display:flex;justify-content:space-between;align-items:center;}
+.modal-header h3{margin:0;color:var(--blue);}
+.close{color:var(--text);font-size:24px;font-weight:bold;cursor:pointer;transition:color 0.2s;}
+.close:hover{color:var(--red);}
+pre{background:#f9fafb;padding:10px;border-radius:8px;overflow:auto;font-size:13px;border:1px solid var(--border);}
+body.dark pre{background:#1e293b;}
 </style>
 </head>
 <body>
-<header><h1><span class="shield">🛡️</span> NetSentinel Live Dashboard</h1></header>
+<header>
+  <h1><span class="shield">🛡️</span> NetSentinel Dashboard</h1>
+  <button id="themeToggle" title="Toggle Theme">🌙</button>
+</header>
 
 <section class="cards">
   <div class="card blue"><h2>Total Queries</h2><p id="kpiTotal">--</p></div>
@@ -40,59 +81,77 @@ input[type=text]{width:80%;padding:8px;border:1px solid var(--border);border-rad
 <section class="grid">
   <div class="panel">
     <div class="title" style="color:#dc2626">Blocked Domains</div>
-    <table><thead><tr><th>Domain</th><th>Client</th><th>Time</th><th>Action</th></tr></thead><tbody id="blockedBody"></tbody></table>
+    <table><thead><tr><th>Domain</th><th>Client</th><th>Time</th><th>Tier-2</th><th>Actions</th></tr></thead><tbody id="blockedBody"></tbody></table>
     <div class="actions">
       <button class="gray" onclick="pagePrev('blocked')">◀ Prev</button>
       <span id="blockedPage">Page 1</span>
       <button class="gray" onclick="pageNext('blocked')">Next ▶</button>
-      <button class="red" onclick="clearList('block')">🗑 Clear All</button>
+      <button class="red" onclick="clearList('block')">🗑 Clear</button>
     </div>
   </div>
 
   <div class="panel">
     <div class="title" style="color:#16a34a">Allowed Domains</div>
-    <table><thead><tr><th>Domain</th><th>Client</th><th>Time</th><th>Action</th></tr></thead><tbody id="allowedBody"></tbody></table>
+    <table><thead><tr><th>Domain</th><th>Client</th><th>Time</th><th>Tier-2</th><th>Actions</th></tr></thead><tbody id="allowedBody"></tbody></table>
     <div class="actions">
       <button class="gray" onclick="pagePrev('allowed')">◀ Prev</button>
       <span id="allowedPage">Page 1</span>
       <button class="gray" onclick="pageNext('allowed')">Next ▶</button>
-      <button class="red" onclick="clearList('allow')">🗑 Clear All</button>
+      <button class="red" onclick="clearList('allow')">🗑 Clear</button>
     </div>
   </div>
 </section>
 
 <section class="chat">
   <h3>🤖 Ask Why a Domain Was Blocked</h3>
-  <input id="askInput" type="text" placeholder="Enter Query ID (QX-...) or Domain (e.g., example.com)">
+  <input id="askInput" type="text" placeholder="Enter Query ID (QX-...) or Domain">
   <button onclick="askReason()">Ask</button>
   <div id="chatOutput">Awaiting input...</div>
 </section>
+
+<!-- === Modal for Tier-2 Details === -->
+<div id="detailsModal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 id="modalTitle">Tier-2 Intelligence</h3>
+      <span class="close" onclick="closeModal()">&times;</span>
+    </div>
+    <div id="modalBody"></div>
+  </div>
+</div>
 
 <script>
 const PAGE_SIZE=5;
 let logs=[],lists={allowlist:[],blocklist:[]},pages={blocked:1,allowed:1};
 
-function dedupe(rows){
-  const seen=new Set(),out=[];
-  for(const r of rows){if(!seen.has(r.domain)){seen.add(r.domain);out.push(r);}}
-  return out;
+/* === THEME TOGGLE === */
+const toggleBtn=document.getElementById('themeToggle');
+function setTheme(dark){
+  document.body.classList.toggle('dark',dark);
+  toggleBtn.textContent=dark?'☀️':'🌙';
+  localStorage.setItem('theme',dark?'dark':'light');
 }
+toggleBtn.onclick=()=>setTheme(!document.body.classList.contains('dark'));
+setTheme(localStorage.getItem('theme')==='dark');
+
+/* === HELPERS === */
+function dedupe(rows){const seen=new Set(),out=[];for(const r of rows){if(!seen.has(r.domain)){seen.add(r.domain);out.push(r);}}return out;}
 function paginate(arr,page){return arr.slice((page-1)*PAGE_SIZE,(page)*PAGE_SIZE);}
 function setPageLabel(k,total){document.getElementById(k+'Page').textContent=`Page ${pages[k]} of ${Math.ceil(total/PAGE_SIZE)||1}`;}
+function riskClass(score){if(score>0.7)return' risk-high';if(score>0.4)return' risk-mid';return' risk-low';}
 
 async function loadAll(){
   const [lgs,lst]=await Promise.all([fetch('/api/logs').then(r=>r.json()),fetch('/api/lists').then(r=>r.json())]);
   logs=lgs||[];lists=lst||{};
-  const total=logs.length,blocked=logs.filter(x=>x.verdict==='BLOCK').length;
+  const total=logs.length,blocked=logs.filter(x=>x.verdict==='BLOCK'||x.verdict==='MALICIOUS').length;
   document.getElementById('kpiTotal').textContent=total||0;
   document.getElementById('kpiBlocked').textContent=blocked||0;
   document.getElementById('kpiPct').textContent=total?((blocked/total*100).toFixed(1)+'%'):'--%';
   document.getElementById('kpiBlockCount').textContent=lists.block_count||lists.blocklist?.length||0;
 
   const sorted=[...logs].sort((a,b)=>(b.timestamp||'').localeCompare(a.timestamp||''));
-  const blockRows=dedupe(sorted.filter(x=>x.verdict==='BLOCK'));
-  const allowRows=dedupe(sorted.filter(x=>x.verdict==='ALLOW' && !lists.blocklist.includes(x.domain)));
-
+  const blockRows=dedupe(sorted.filter(x=>x.verdict==='BLOCK'||x.verdict==='MALICIOUS'));
+  const allowRows=dedupe(sorted.filter(x=>x.verdict==='ALLOW'||x.verdict==='LEGIT'));
   renderTable('blocked',blockRows,lists.blocklist);
   renderTable('allowed',allowRows,lists.allowlist);
 }
@@ -102,64 +161,63 @@ function renderTable(kind,rows,listFile){
   const pageRows=paginate(rows,pages[kind]);
   for(const r of pageRows){
     const inList=(listFile||[]).includes(r.domain);
-    body.innerHTML+=`<tr><td>${r.domain}</td><td>${r.client_ip||'-'}</td><td>${r.timestamp||'-'}</td><td>${inList?'<button class="red" onclick="removeFromList(\''+kind.replace('ed','')+'\',\''+r.domain+'\')">Remove</button>':'—'}</td></tr>`;
+    const score=r.tier2_score!==undefined?Number(r.tier2_score):null;
+    const bar=score!==null?`<div class="riskbar${riskClass(score)}" title="${score.toFixed(2)}"></div>`:'-';
+    body.innerHTML+=`
+    <tr>
+      <td>${r.domain}</td>
+      <td>${r.client_ip||'-'}</td>
+      <td>${r.timestamp||'-'}</td>
+      <td style="text-align:center">${bar}</td>
+      <td>
+        <button onclick="showDetails('${r.query_id}')">🔍</button>
+        ${inList?'<button class="red" onclick="removeFromList(\''+kind.replace('ed','')+'\',\''+r.domain+'\')">🗑</button>':'—'}
+      </td>
+    </tr>`;
   }
   setPageLabel(kind,rows.length);
 }
 
 function pageNext(k){pages[k]++;loadAll();}
 function pagePrev(k){if(pages[k]>1){pages[k]--;loadAll();}}
-
-async function removeFromList(type,domain){
-  if(!confirm('Remove '+domain+' from '+type+'list?'))return;
-  await fetch('/api/lists/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,domain})});
-  loadAll();
-}
-
-async function clearList(type){
-  if(!confirm('Clear entire '+type+'list?'))return;
-  await fetch('/api/lists/clear',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type})});
-  loadAll();
-}
+async function removeFromList(type,domain){if(!confirm('Remove '+domain+' from '+type+'list?'))return;
+  await fetch('/api/lists/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,domain})});loadAll();}
+async function clearList(type){if(!confirm('Clear '+type+' list?'))return;
+  await fetch('/api/lists/clear',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type})});loadAll();}
 
 async function askReason(){
   const q=document.getElementById('askInput').value.trim();
   const out=document.getElementById('chatOutput');
   if(!q){alert('Enter a query ID or domain');return;}
-
-  // If the user typed a domain, find the latest row to show header info
-  let row = logs.find(x => x.query_id===q || x.domain===q);
-  const target = encodeURIComponent(q); // support dots etc.
-
-  out.textContent = '⏳ Fetching explanation...';
+  let row=logs.find(x=>x.query_id===q||x.domain===q);
+  out.textContent='⏳ Fetching explanation...';
   try{
-    // call our dashboard proxy which forwards to API :5000
-    const r = await fetch(`/api/report/${target}`);
-    const data = await r.json();
-    if(!r.ok || !data || (!data.narrative && !data.error)){
-      out.textContent = '⚠️ Error fetching report.';
-      return;
-    }
-
-    if(data.error){
-      out.textContent = '⚠️ ' + data.error;
-      return;
-    }
-
-    // Build a nice header if we have a matching log row
-    let header = '';
-    if(!row && data.query_id && data.domain){
-      // if API returned query-level info, synthesize a header
-      header = `Query: ${data.query_id}\nDomain: ${data.domain}\n\n`;
-    } else if(row){
-      header = `Query: ${row.query_id}\nDomain: ${row.domain}\nClient: ${row.client_ip}\nVerdict: ${row.verdict}\nTime: ${row.timestamp}\n\n`;
-    }
-
-    out.textContent = header + (data.narrative || '');
-  }catch(e){
-    out.textContent = '⚠️ Error fetching report.';
-  }
+    const r=await fetch(`/api/report/${encodeURIComponent(q)}`);
+    const data=await r.json();
+    if(!r.ok||!data||(!data.narrative&&!data.error)){out.textContent='⚠️ Error fetching report.';return;}
+    if(data.error){out.textContent='⚠️ '+data.error;return;}
+    let header='';
+    if(row){header=`Query: ${row.query_id}\nDomain: ${row.domain}\nClient: ${row.client_ip}\nVerdict: ${row.verdict}\nTime: ${row.timestamp}\n\n`;}
+    out.textContent=header+(data.narrative||'');
+  }catch(e){out.textContent='⚠️ Error fetching report.';}
 }
+
+/* === MODAL === */
+function showDetails(qid){
+  const row=logs.find(x=>x.query_id===qid);
+  if(!row){alert("No details found.");return;}
+  const modal=document.getElementById('detailsModal');
+  document.getElementById('modalTitle').textContent=`Tier-2 Intelligence for ${row.domain}`;
+  document.getElementById('modalBody').innerHTML=`
+    <p><b>Tier-2 Score:</b> ${row.tier2_score!==undefined?Number(row.tier2_score).toFixed(2):'-'}</p>
+    <h4>🔎 Threat Intel (VirusTotal)</h4>
+    <pre>${row.tier2_intel?JSON.stringify(row.tier2_intel,null,2):'No data'}</pre>
+    <h4>🌐 URL Enrichment</h4>
+    <pre>${row.tier2_enrichment?JSON.stringify(row.tier2_enrichment,null,2):'No data'}</pre>`;
+  modal.style.display='block';
+}
+function closeModal(){document.getElementById('detailsModal').style.display='none';}
+window.onclick=e=>{if(e.target==document.getElementById('detailsModal'))closeModal();}
 
 loadAll();setInterval(loadAll,5000);
 </script>

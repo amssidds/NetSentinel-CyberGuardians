@@ -10,7 +10,7 @@ import engine_config as cfg
 
 
 # --- Ensure DB and folders exist ---
-os.makedirs(cfg.LISTS_DIR, exist_ok=True)
+os.makedirs(os.path.join(os.path.dirname(cfg.DB_PATH), "lists"), exist_ok=True)
 os.makedirs(cfg.REPORTS_DIR, exist_ok=True)
 os.makedirs(os.path.dirname(cfg.DB_PATH), exist_ok=True)
 
@@ -24,10 +24,13 @@ def ensure_db():
             query_id TEXT,
             domain TEXT,
             client_ip TEXT,
-            score INTEGER,
+            score REAL,
             verdict TEXT,
             reasons TEXT,
             modules_result TEXT,
+            tier2_enrichment TEXT,
+            tier2_intel TEXT,
+            tier2_score REAL,
             ts TEXT
         )
     """)

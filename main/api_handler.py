@@ -1,10 +1,14 @@
 # api_handler.py
+
+
 from flask import Flask, request, jsonify
 from ai_modules.url_enricher import enrich_url
 from ai_modules.threat_intel import vt_check
 import sqlite3, json, glob, os
 from engine import evaluate_domain, ensure_db
 import engine_config as cfg
+from ai_modules.threat_intel import vt_check
+from ai_modules.url_enricher import enrich_url
 
 app = Flask(__name__)
 ensure_db()
@@ -54,26 +58,39 @@ def evaluate():
         # Gracefully handle dependency issues (e.g., domain classifier offline)
         return jsonify({"error": f"Evaluation failed: {str(e)}"}), 503
 
-    avg_score = result.get("score", 0)
-    tier2_score = 0
+    # --- Tier-2: always run enrichment and threat intel ---
     enrichment = {}
     intel = {}
+    try:
+        enrichment = enrich_url(domain) or {}
+    except Exception as e:
+        enrichment = {"meta_score": 0.0, "error": str(e)}
 
-    if avg_score > 0.5:
-        enrichment = enrich_url(domain)
-        intel = vt_check(domain)
-        tier2_score = (enrichment["meta_score"] + intel["intel_score"]) / 2
-        result["tier2_enrichment"] = enrichment
-        result["tier2_intel"] = intel
-        result["tier2_score"] = tier2_score
-        result["score"] = round((avg_score * 0.9) + (tier2_score * 0.1), 2)
-        result["verdict"] = (
-            "MALICIOUS" if result["score"] > 0.7
-            else "SUSPICIOUS" if result["score"] > 0.5
-            else "LEGIT"
-        )
+    try:
+        intel = vt_check(domain) or {}
+    except Exception as e:
+        intel = {"intel_score": 0.0, "error": str(e)}
+
+    meta_score = enrichment.get("meta_score", 0.0)
+    intel_score = intel.get("intel_score", 0.0)
+    tier2_score = round((meta_score + intel_score) / 2, 3)
+
+    # Merge Tier-2 results
+    result["tier2_enrichment"] = enrichment
+    result["tier2_intel"] = intel
+    result["tier2_score"] = tier2_score
+
+    # Recalculate total score + verdict
+    avg_score = result.get("score", 0)
+    result["score"] = round((avg_score * 0.9) + (tier2_score * 0.1), 2)
+    result["verdict"] = (
+        "MALICIOUS" if result["score"] > 0.7
+        else "SUSPICIOUS" if result["score"] > 0.5
+        else "LEGIT"
+    )
 
     return jsonify(result)
+
 
 @app.route("/api/logs", methods=["GET"])
 @app.route("/logs", methods=["GET"])

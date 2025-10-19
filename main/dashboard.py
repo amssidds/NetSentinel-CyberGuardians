@@ -12,14 +12,34 @@ API_BASE = "http://127.0.0.1:5000"
 def get_logs(limit=50):
     conn = sqlite3.connect(cfg.DB_PATH)
     cur = conn.cursor()
-    cur.execute("SELECT query_id, domain, client_ip, score, verdict, ts FROM logs ORDER BY id DESC LIMIT ?", (limit,))
+    cur.execute("""
+        SELECT query_id, domain, client_ip, score, verdict, ts,
+               tier2_score, tier2_enrichment, tier2_intel
+        FROM logs
+        ORDER BY id DESC
+        LIMIT ?
+    """, (limit,))
     rows = cur.fetchall()
     conn.close()
-    return [
-        {"query_id": r[0], "domain": r[1], "client_ip": r[2],
-         "score": r[3], "verdict": r[4], "timestamp": r[5]}
-        for r in rows
-    ]
+
+    data = []
+    for r in rows:
+        entry = {
+            "query_id": r[0],
+            "domain": r[1],
+            "client_ip": r[2],
+            "score": r[3],
+            "verdict": r[4],
+            "timestamp": r[5],
+        }
+        # Tier-2 fields (may be NULL)
+        if len(r) > 6:
+            entry["tier2_score"] = r[6]
+            entry["tier2_enrichment"] = r[7]
+            entry["tier2_intel"] = r[8]
+        data.append(entry)
+    return data
+
 
 # === Utility: read allow/block lists ===
 def read_list(fname):

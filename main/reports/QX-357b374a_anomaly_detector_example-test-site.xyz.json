@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "flag": 1,
+  "score": 1,
+  "reason": "ok",
+  "query_id": "QX-357b374a",
+  "module": "anomaly_detector",
+  "domain": "example-test-site.xyz"
+}
